@@ -1,4 +1,4 @@
-name: Windows.
+name: Windows
 
 on:
   workflow_dispatch:
@@ -42,7 +42,6 @@ on:
       - 'Telegram/Telegram.plist'
 
 jobs:
-
   windows:
     name: Windows
     runs-on: ${{ matrix.arch == 'arm64' && 'windows-11-arm' || ((github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/') || github.ref == 'refs/heads/nightly') && 'depot-windows-latest-16' || 'windows-latest') }}
@@ -107,13 +106,28 @@ jobs:
         run: |
           $exe = Join-Path $env:RUNNER_TEMP 'vs_buildtools.exe'
           Invoke-WebRequest -Uri https://aka.ms/vs/18/stable/vs_buildtools.exe -OutFile $exe
-          $p = Start-Process -FilePath $exe -Wait -PassThru -ArgumentList `
-            '--quiet','--wait','--norestart','--nocache', `
-            '--add','Microsoft.VisualStudio.Workload.VCTools', `
-            '--add','Microsoft.VisualStudio.Component.VC.Tools.ARM64', `
-            '--add','Microsoft.VisualStudio.Component.VC.ATL.ARM64'
+
+          $p = Start-Process `
+            -FilePath $exe `
+            -Wait `
+            -PassThru `
+            -ArgumentList `
+              '--quiet',
+              '--wait',
+              '--norestart',
+              '--nocache',
+              '--add',
+              'Microsoft.VisualStudio.Workload.VCTools',
+              '--add',
+              'Microsoft.VisualStudio.Component.VC.Tools.ARM64',
+              '--add',
+              'Microsoft.VisualStudio.Component.VC.ATL.ARM64'
+
           Remove-Item $exe -Force -ErrorAction SilentlyContinue
-          if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) { exit $p.ExitCode }
+
+          if ($p.ExitCode -ne 0 -and $p.ExitCode -ne 3010) {
+            exit $p.ExitCode
+          }
 
       - uses: Eden-CI/msvc-dev-cmd@master
         name: Native Tools Command Prompt.
@@ -133,7 +147,8 @@ jobs:
         with:
           path: ${{ env.TBUILD }}\ThirdParty
           key: ${{ runner.OS }}-${{ runner.arch }}-third-party-${{ env.CACHE_KEY }}
-          restore-keys: ${{ runner.OS }}-${{ runner.arch }}-third-party-
+          restore-keys: |
+            ${{ runner.OS }}-${{ runner.arch }}-third-party-
 
       - name: Libraries cache.
         id: cache-libs
@@ -146,7 +161,8 @@ jobs:
             ${{ env.LibrariesPath }}\cache_keys\*
             !${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
           key: ${{ runner.OS }}-${{ matrix.arch }}-libs-v2-${{ env.CACHE_KEY }}
-          restore-keys: ${{ runner.OS }}-${{ matrix.arch }}-libs-v2-
+          restore-keys: |
+            ${{ runner.OS }}-${{ matrix.arch }}-libs-v2-
 
       - name: Qt cache.
         id: cache-qt
@@ -156,7 +172,8 @@ jobs:
             ${{ env.LibrariesPath }}\[qQ]t[_-]*
             ${{ env.LibrariesPath }}\cache_keys\[qQ]t[_-]*
           key: ${{ runner.OS }}-${{ matrix.arch }}-${{ matrix.qt || 'qt' }}-${{ env.CACHE_KEY }}
-          restore-keys: ${{ runner.OS }}-${{ matrix.arch }}-${{ matrix.qt || 'qt' }}-
+          restore-keys: |
+            ${{ runner.OS }}-${{ matrix.arch }}-${{ matrix.qt || 'qt' }}-
 
       - name: Libraries.
         run: |
@@ -170,10 +187,17 @@ jobs:
           ARCH=""
           if [ -n "${{ matrix.arch }}" ]; then
             case "${{ matrix.arch }}" in
-              x64_x86) ARCH="x86";;
-              arm64) ARCH="arm";;
-              *) ARCH="${{ matrix.arch }}";;
+              x64_x86)
+                ARCH="x86"
+                ;;
+              arm64)
+                ARCH="arm"
+                ;;
+              *)
+                ARCH="${{ matrix.arch }}"
+                ;;
             esac
+
             echo "Architecture from matrix: $ARCH"
             ARTIFACT_NAME="${ARTIFACT_NAME} ${{ matrix.arch }}"
           fi
@@ -188,6 +212,7 @@ jobs:
             echo "Generator from matrix: $GENERATOR"
             ARTIFACT_NAME="${ARTIFACT_NAME} ${{ matrix.generator }}"
           fi
+
           echo "TDESKTOP_BUILD_GENERATOR=$GENERATOR" >> $GITHUB_ENV
 
           [ -n "$GENERATOR" ] && ARCH=""
@@ -199,47 +224,162 @@ jobs:
             echo "Define from matrix: $DEFINE"
             ARTIFACT_NAME="${ARTIFACT_NAME} ${{ matrix.defines }}"
           fi
-          echo "TDESKTOP_BUILD_DEFINE=$DEFINE" >> $GITHUB_ENV
 
+          echo "TDESKTOP_BUILD_DEFINE=$DEFINE" >> $GITHUB_ENV
           echo "ARTIFACT_NAME=$ARTIFACT_NAME" >> $GITHUB_ENV
 
           API="-D TDESKTOP_API_TEST=ON"
-          if [ $GITHUB_REF == 'refs/heads/nightly' ]; then
+
+          if [ "$GITHUB_REF" = "refs/heads/nightly" ]; then
             echo "Use the open credentials."
             API="-D TDESKTOP_API_ID=611335 -D TDESKTOP_API_HASH=d524b414d21f4d37f08684c1df41ac9c"
           fi
+
           echo "TDESKTOP_BUILD_API=$API" >> $GITHUB_ENV
+
+      - name: Verify Python configure files.
+        run: |
+          cd %TBUILD%\%REPO_NAME%\Telegram
+
+          echo ========================================
+          echo Current directory:
+          cd
+          echo ========================================
+
+          echo configure.py:
+          if not exist configure.py (
+            echo ERROR: configure.py not found!
+            exit /b 1
+          )
+          dir configure.py
+
+          echo ========================================
+          echo run_cmake.py:
+          if not exist run_cmake.py (
+            echo ERROR: run_cmake.py not found!
+            echo.
+            echo Searching repository...
+            dir /s /b run_cmake.py 2>nul
+            exit /b 1
+          )
+          dir run_cmake.py
+
+          echo ========================================
+          echo Python:
+          where python
+          python --version
+
+          echo ========================================
+          echo Testing run_cmake import:
+          set PYTHONPATH=%CD%;%PYTHONPATH%
+          python -c "import run_cmake; print('run_cmake import: OK')"
+
+          if errorlevel 1 (
+            echo ERROR: Python cannot import run_cmake
+            exit /b 1
+          )
 
       - name: Free up some disk space.
         shell: bash
-        run: find $LibrariesPath '(' '(' ! '(' -name '*.lib' -o -name '*.a' -o -name '*.exe' -o -name '*.h' -o -name '*.hpp' -o -name '*.inc' -o -name '*.cmake' -o -name '*.pc' -o -path '*/include/*' -o -path '*/objects-*' -o -path '*/cache_keys/*' -o -path '*/patches/*' -o -path '*/nv-codec-headers/*' ')' -type f ')' -o -empty ')' -delete
+        run: |
+          find $LibrariesPath '(' '(' ! '(' \
+            -name '*.lib' \
+            -o -name '*.a' \
+            -o -name '*.exe' \
+            -o -name '*.h' \
+            -o -name '*.hpp' \
+            -o -name '*.inc' \
+            -o -name '*.cmake' \
+            -o -name '*.pc' \
+            -o -path '*/include/*' \
+            -o -path '*/objects-*' \
+            -o -path '*/cache_keys/*' \
+            -o -path '*/patches/*' \
+            -o -path '*/nv-codec-headers/*' \
+          ')' -type f ')' -o -empty ')' -delete
 
       - name: Telegram Desktop build.
         if: env.ONLY_CACHE == 'false'
         run: |
           cd %TBUILD%\%REPO_NAME%\Telegram
 
+          set PYTHONPATH=%CD%;%PYTHONPATH%
+
+          echo ========================================
+          echo Building Telegram Desktop
+          echo Directory:
+          cd
+          echo PYTHONPATH:
+          echo %PYTHONPATH%
+          echo ========================================
+
           call configure.bat ^
-          %TDESKTOP_BUILD_GENERATOR% ^
-          %TDESKTOP_BUILD_ARCH% ^
-          ${{ matrix.qt }} ^
-          %TDESKTOP_BUILD_API% ^
-          -D CMAKE_CONFIGURATION_TYPES=Debug ^
-          -D CMAKE_COMPILE_WARNING_AS_ERROR=ON ^
-          -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT= ^
-          -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF ^
-          -D DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF ^
-          %TDESKTOP_BUILD_DEFINE%
+            %TDESKTOP_BUILD_GENERATOR% ^
+            %TDESKTOP_BUILD_ARCH% ^
+            ${{ matrix.qt }} ^
+            %TDESKTOP_BUILD_API% ^
+            -D CMAKE_CONFIGURATION_TYPES=Debug ^
+            -D CMAKE_COMPILE_WARNING_AS_ERROR=ON ^
+            -D CMAKE_MSVC_DEBUG_INFORMATION_FORMAT= ^
+            -D DESKTOP_APP_DISABLE_AUTOUPDATE=OFF ^
+            -D DESKTOP_APP_DISABLE_CRASH_REPORTS=OFF ^
+            %TDESKTOP_BUILD_DEFINE%
+
+          if errorlevel 1 (
+            echo.
+            echo ========================================
+            echo CONFIGURE FAILED
+            echo ========================================
+            exit /b %errorlevel%
+          )
+
+          if not exist ..\out (
+            echo.
+            echo ERROR: configure.bat completed but ..\out was not created.
+            exit /b 1
+          )
 
           cmake --build ..\out --config Debug --parallel
+
+          if errorlevel 1 (
+            echo.
+            echo ========================================
+            echo BUILD FAILED
+            echo ========================================
+            exit /b %errorlevel%
+          )
+
+      - name: Verify build artifacts.
+        if: env.ONLY_CACHE == 'false'
+        run: |
+          set OUT=%TBUILD%\%REPO_NAME%\out\Debug
+
+          if not exist "%OUT%" (
+            echo ERROR: Build output directory does not exist:
+            echo %OUT%
+            exit /b 1
+          )
+
+          if not exist "%OUT%\Telegram.exe" (
+            echo ERROR: Telegram.exe was not produced.
+            exit /b 1
+          )
+
+          if not exist "%OUT%\Updater.exe" (
+            echo ERROR: Updater.exe was not produced.
+            exit /b 1
+          )
 
       - name: Move artifact.
         if: (env.UPLOAD_ARTIFACT == 'true') || (github.ref == 'refs/heads/nightly')
         run: |
           set OUT=%TBUILD%\%REPO_NAME%\out\Debug
+
           mkdir artifact
-          move %OUT%\Telegram.exe artifact/
-          move %OUT%\Updater.exe artifact/
+
+          move "%OUT%\Telegram.exe" artifact\
+          move "%OUT%\Updater.exe" artifact\
+
       - uses: actions/upload-artifact@v7
         name: Upload artifact.
         if: (env.UPLOAD_ARTIFACT == 'true') || (github.ref == 'refs/heads/nightly')
