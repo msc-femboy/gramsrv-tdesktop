@@ -255,14 +255,15 @@ jobs:
 
           echo ========================================
           echo run_cmake.py:
-          if not exist run_cmake.py (
-            echo ERROR: run_cmake.py not found!
+          if not exist ..\cmake\run_cmake.py (
+            echo ERROR: ..\cmake\run_cmake.py not found!
             echo.
             echo Searching repository...
+            cd ..
             dir /s /b run_cmake.py 2>nul
             exit /b 1
           )
-          dir run_cmake.py
+          dir ..\cmake\run_cmake.py
 
           echo ========================================
           echo Python:
@@ -271,7 +272,7 @@ jobs:
 
           echo ========================================
           echo Testing run_cmake import:
-          set PYTHONPATH=%CD%;%PYTHONPATH%
+          set PYTHONPATH=%CD%\..\cmake;%PYTHONPATH%
           python -c "import run_cmake; print('run_cmake import: OK')"
 
           if errorlevel 1 (
